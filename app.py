@@ -29,7 +29,7 @@ def download_model():
 # Download model at startup
 try:
     download_model()
-    # Updated model loading for TF 2.15 compatibility
+    # Load model with custom objects if needed
     model = tf.keras.models.load_model(MODEL_PATH, compile=False)
     logger.info("Model loaded successfully")
 except Exception as e:
@@ -61,7 +61,6 @@ def predict():
         if image is None:
             return jsonify({"error": "Invalid image file"}), 400
             
-        # Updated preprocessing for TF 2.15
         image = cv2.resize(image, (224, 224))
         image = image / 255.0
         image = np.expand_dims(image, axis=0)
