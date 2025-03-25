@@ -1,21 +1,21 @@
-import logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 from flask import Flask, request, render_template, jsonify
 import tensorflow as tf
 import numpy as np
 import cv2
 import os
 import gdown
-import os
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Google Drive file ID (Extract from your Drive link)
+# Google Drive file ID
 FILE_ID = "1dtxCw1PCIQcbfkb2rgd6vr4Zpv-Y4Qv5"
 MODEL_PATH = "model.h5"
 
-# Function to download model from Google Drive
 def download_model():
     if not os.path.exists(MODEL_PATH):
         logger.info("Downloading model from Google Drive...")
@@ -26,44 +26,57 @@ def download_model():
             logger.error(f"Failed to download model: {str(e)}")
             raise
 
-# Download model
-download_model()
+# Download model at startup
+try:
+    download_model()
+    # Updated model loading for TF 2.15 compatibility
+    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+    logger.info("Model loaded successfully")
+except Exception as e:
+    logger.error(f"Model loading failed: {str(e)}")
+    model = None
 
-# Load the trained model
-print("Loading Model...")
-model = tf.keras.models.load_model(MODEL_PATH)
-print("Model Loaded Successfully!")
-
-# Route to serve the frontend UI
 @app.route("/")
 def home():
     return render_template("index.html")
 
-# API endpoint to handle image upload and prediction
 @app.route("/predict", methods=["POST"])
 def predict():
+    if model is None:
+        return jsonify({"error": "Model not loaded. Service unavailable."}), 503
+
     if "file" not in request.files:
-        return jsonify({"error": "No file uploaded!"})
+        return jsonify({"error": "No file uploaded!"}), 400
 
     file = request.files["file"]
 
     if file.filename == "":
-        return jsonify({"error": "No file selected!"})
+        return jsonify({"error": "No file selected!"}), 400
 
-    # Read image and preprocess
-    image = cv2.imdecode(np.frombuffer(file.read(), np.uint8), cv2.IMREAD_COLOR)
-    image = cv2.resize(image, (224, 224))  # Resize to match model input size
-    image = image / 255.0  # Normalize
-    image = np.expand_dims(image, axis=0)  # Add batch dimension
+    try:
+        # Read and preprocess image
+        file_bytes = np.frombuffer(file.read(), np.uint8)
+        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        
+        if image is None:
+            return jsonify({"error": "Invalid image file"}), 400
+            
+        # Updated preprocessing for TF 2.15
+        image = cv2.resize(image, (224, 224))
+        image = image / 255.0
+        image = np.expand_dims(image, axis=0)
 
-    # Predict using model
-    predictions = model.predict(image)
-    skin_tone_labels = ["light", "mid-light", "mid-dark", "dark"]  # Modify based on your dataset
-    predicted_skin_tone = skin_tone_labels[np.argmax(predictions)]
+        # Predict
+        predictions = model.predict(image)
+        skin_tone_labels = ["light", "mid-light", "mid-dark", "dark"]
+        predicted_skin_tone = skin_tone_labels[np.argmax(predictions)]
 
-    return jsonify({"skin_tone": predicted_skin_tone})
+        return jsonify({"skin_tone": predicted_skin_tone})
+
+    except Exception as e:
+        logger.error(f"Prediction error: {str(e)}")
+        return jsonify({"error": "An error occurred during processing"}), 500
 
 if __name__ == "__main__":
-    # Ensure it uses the PORT environment variable when deployed on Render
-    port = int(os.getenv('PORT', 5000))
-    app.run(debug=True, host="0.0.0.0", port=port)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
