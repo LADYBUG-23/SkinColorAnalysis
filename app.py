@@ -1,3 +1,6 @@
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 from flask import Flask, request, render_template, jsonify
 import tensorflow as tf
 import numpy as np
@@ -14,9 +17,14 @@ MODEL_PATH = "model.h5"
 
 # Function to download model from Google Drive
 def download_model():
-    if not os.path.exists(MODEL_PATH):  # Download only if the file is not present
-        print("Downloading model from Google Drive...")
-        gdown.download(f"https://drive.google.com/uc?id={FILE_ID}", MODEL_PATH, quiet=False)
+    if not os.path.exists(MODEL_PATH):
+        logger.info("Downloading model from Google Drive...")
+        try:
+            gdown.download(f"https://drive.google.com/uc?id={FILE_ID}", MODEL_PATH, quiet=False)
+            logger.info("Model downloaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to download model: {str(e)}")
+            raise
 
 # Download model
 download_model()
