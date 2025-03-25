@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import os
 import gdown
+import os
 
 app = Flask(__name__)
 
@@ -55,4 +56,6 @@ def predict():
     return jsonify({"skin_tone": predicted_skin_tone})
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Ensure it uses the PORT environment variable when deployed on Render
+    port = int(os.getenv('PORT', 5000))
+    app.run(debug=True, host="0.0.0.0", port=port)
